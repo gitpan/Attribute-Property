@@ -1,16 +1,27 @@
 package Attribute::Property;
 
-# $Id: Property.pm,v 1.47 2003/03/03 13:30:06 juerd Exp $
+# $Id: Property.pm,v 1.48 2003/04/21 16:04:14 juerd Exp $
 # v 1.25 -> CPAN as 1.02
 
 use 5.006;
 use Attribute::Handlers;
 use Carp;
-use Want qw(want rreturn);
+
+# use Want qw(want rreturn);
+BEGIN {
+    if (eval { require Want }) {
+        *want    = Want::want;
+        *rreturn = Want::rreturn;
+    } else {
+        *want    = sub { 0 };
+        *rreturn = sub { 0 };
+    }
+}
+
 no strict;
 no warnings;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 $Carp::Internal{Attribute::Handlers}++;	 # may we be forgiven for our sins
 $Carp::Internal{+__PACKAGE__}++;
@@ -79,13 +90,13 @@ Attribute::Property - Easy lvalue accessors with validation. ($foo->bar = 42)
 
 =head2 CLASS
 
-    package SomeClass;
-
     use Attribute::Property;
     use Carp;
 
-    sub new : New { further initialization here ... }
+    package SomeClass;
 
+    sub new : New { further initialization here ... }
+    
     sub nondigits : Property { /^\D+\z/ }
     sub digits    : Property { /^\d+\z/ or croak "custom error message" }
     sub anyvalue  : Property;
@@ -129,7 +140,7 @@ This module introduces two attributes that make object oriented programming
 much easier.  You can just define a constructor and some properties without
 having to write accessors.
 
-=over 12
+=over 4
 
 =item C<Property>
 
@@ -175,20 +186,21 @@ for the hash keys.
 
 For class properties of C<Some::Module>, the hash C<%Some::Module> is used.
 For class properties of packages without C<::>, the behaviour is undefined.
-Currently, for properties of C<Class>, the hash C<%Attribute::Property::Class>
-is used but this may change in a future version.
 
 In short: C<< $foo->bar = 14 >> and C<< $foo->bar(14) >> assign 14 to 
 C<< $foo->{bar} >> after positive validation.  The same thing happens with C<< my
 $foo = Class->new(bar => 14); >> given that C<Class::new> uses the C<New>
 property.
 
+If you have the Want module installed, Attribute::Property will use it to make
+rvalue method calls more efficient.
+
 =head1 COMPATIBILITY
 
 Old fashioned C<< $object->property(VALUE) >> is still available.
 
-This module requires a modern Perl, fossils like Perl 5.00x don't support our
-chicanery.
+This module requires a modern Perl (5.6.0+), fossils like Perl 5.00x don't
+support our chicanery.
 
 =head1 BUGS
 

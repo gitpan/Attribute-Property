@@ -1,7 +1,12 @@
 Revision history for Perl extension Attribute::Property.
-$Id: Changes,v 1.11 2003/03/03 08:45:48 juerd Exp $
+$Id: Changes,v 1.12 2003/04/21 16:04:14 juerd Exp $
 
-1.03  ?
+1.04  Mon Apr 21 17:54:12 2003
+        - Want.pm is no longer required, so the module can be used by people
+          that can't compile XS modules. If it is installed, it will be used,
+          but if it's not, it'll simply fall back to something that does work.
+
+1.03  Mon Mar  3 13:35:53 2003
 	- Fixed object passing and added tests for $_[0]
 	- Improved speed for rvalue calls, new dependency: Want.pm
 	- Moved the attribute handler from INIT to CHECK phase
