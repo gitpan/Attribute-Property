@@ -1,8 +1,15 @@
-# $Id: 1.t,v 1.16 2003/02/10 08:30:07 juerd Exp $
+#!/usr/bin/perl -I../blib/lib
+# $Id: 1.t,v 1.20 2003/03/03 08:45:48 juerd Exp $
 # make; perl -Iblib/lib t/1.t
 
 use lib 't/lib';
-use Test::More tests => 99;
+use Test::More tests => 176;
+
+# BEGIN {
+#     my $ok = \&ok;
+#     *ok = sub ($;$) { select(undef, undef, undef, 0.1); goto &$ok; }
+# }
+
 no strict;
 no warnings;
 
@@ -13,6 +20,9 @@ my $ok;
 {
 	package X::X;
 	sub new { bless { }, shift }
+	sub New1 : New;
+	sub New2 : New { $ok = !$ok; shift }
+	sub New3 : New { 3 };
 	sub digits : Property { /^\d+$/ }
 	sub any : Property;
 	sub fail : Property { 0 }
@@ -24,20 +34,31 @@ my $ok;
 	sub foo2bar_du1 : Property { $_[1] =~ s/foo/bar/ }
 	sub ok2one : Property { $ok = 1 }
 	sub ok2zero : Property { $ok = 0 }
+	sub objectok : Property {
+	    $ok = $_[0] eq __PACKAGE__ || ref($_[0]) eq __PACKAGE__
+	}
 	sub DESTROY { $ok = 2; }
 	BEGIN { *begin = sub : Property { 1 } }
 }
 
-my $object = X::X->new;
+ok(my $object1 = eval { X::X->new }, "object1 construction");
+ok(!$@, "no error during object1 construction");
+ok(my $object2 = eval { X::X->New1 }, "object2 construction");
+ok(!$@, "no error during object2 construction");
 
-for my $y ([ $object => 'object' ], [ "X::X" => 'class' ]) {
+for my $y ([ $object1 => 'object1' ], [ $object2 => 'object2' ], [ "X::X" => 'class' ]) {
 
 my $x = $y->[0];
 my $z = "($y->[1])";
 
-can_ok($x, qw(digits any fail du_is_13 du1_is_13 du1_is_du du_is_du1 foo2bar_du
-              foo2bar_du1 ok2one ok2zero DESTROY));
+isa_ok($x, 'X::X') if ref $x;
+isa_ok($x, 'HASH') if ref $x;
 
+can_ok($x, qw(digits any fail du_is_13 du1_is_13 du1_is_du du_is_du1 foo2bar_du
+              foo2bar_du1 ok2one ok2zero objectok DESTROY));
+
+$ok = 0; $x->objectok = 1;
+ok($ok, "$z validation sub can access object");
 $ok = 0; $x->ok2one = 1;
 ok($ok, "$z assignment executes code");
 $ok = 1; $x->ok2zero;
@@ -112,12 +133,41 @@ ok($$foo == 234, "$z reference assignment succeeds");
 ok($$foo == 234, "$z value doesn't change after test");
 ok($x->{digits} == 234, "$z hash element gets set with reference assignment");
 
-} # end of for (object, class)
+} # end of for (object1, object2, class)
 
-ok($object->begin = 1, "generated property functions");
+ok($object1->begin = 1, "generated property works");
 
-undef $object;
-ok($ok == 2, "object gets destroyed correctly");
+undef $object1;
+ok($ok == 2, "object1 gets destroyed correctly");
+undef $object2;
+ok($ok == 2, "object2 gets destroyed correctly");
+
+my $o;
+
+$ok = 0;
+ok($o = X::X->New2, "constructor with initialization code block works");
+ok($ok, "construction executes code");
+ok(X::X->New3 == 3, "initialization code block returns 3");
+
+$ok = 1;
+ok(!eval { X::X->New2(blah => 1) }, "inexistent property fails");
+ok($ok, "faulty construction does not execute code");
+ok($@ =~ /No such property/, "error message says so");
+ok($@ =~ /blah/, "error message mentions inexistent property name 'blah'");
+ok($@ =~ /New2/, "error message mentions method name"); 
+
+ok($o = X::X->New1(digits => 123), "initial property assignment");
+ok($o->digits == 123, "initial property assignment succeeds");
+
+ok(!eval { X::X->New1(digits => "abc") },"invalid initial property assignment");
+ok($o->digits ne"abc", "invalid initial property assignment fails succesfully");
+ok($@ =~ /digits property/, "error message mentions property name 'digits'");
+ok($@ =~ /New1/, "error message mentions method name");
+
+ok(!eval { X::X->New1(1) }, "odd number of args lets constructor croak");
+ok($@ =~ /Odd number/, "error message says so");
+ok($o = X::X->New1(digits => 123, any => "z"), "setting multiple properties");
+ok($o->digits==123 && $o->any eq "z", "setting multiple properties succeeds");
 
 ok(!eval q{my$a= sub : Property { }; 1 }, "anonymous sub can't be a property");
 ok($@ =~ /Property attribute.*anonymous sub/, "error message says so");

@@ -1,26 +1,35 @@
 package Attribute::Property;
 
-# $Id: Property.pm,v 1.25 2003/02/10 08:35:45 juerd Exp $
+# $Id: Property.pm,v 1.47 2003/03/03 13:30:06 juerd Exp $
 # v 1.25 -> CPAN as 1.02
 
 use 5.006;
 use Attribute::Handlers;
 use Carp;
+use Want qw(want rreturn);
 no strict;
 no warnings;
 
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 
 $Carp::Internal{Attribute::Handlers}++;	 # may we be forgiven for our sins
 $Carp::Internal{+__PACKAGE__}++;
 
-sub UNIVERSAL::Property : ATTR(CODE,INIT) {
+my %p;
+
+sub UNIVERSAL::Property : ATTR(CODE) {
 	my (undef, $s, $r) = @_;
 	croak "Cannot use Property attribute with anonymous sub" unless ref $s;
 	my $n = *$s{NAME};
 	*$s = defined &$s
 		? sub : lvalue {
 			croak "Too many arguments for $n method" if @_ > 2;
+			if (want 'RVALUE') {
+	   		        rreturn $_[0]{$n} if @_ != 2;
+			        $r->($_[0], local $_ = $_[1]) 
+				        or croak "Invalid value for $n property";
+			        rreturn $_[0]{$n} = $_;
+			}
 			tie my $foo, __PACKAGE__, ${ \$_[0]{$n} }, $r, $_[0],$n;
 			@_ == 2 ? ( $foo = $_[1] ) : $foo
 		}
@@ -28,15 +37,36 @@ sub UNIVERSAL::Property : ATTR(CODE,INIT) {
 			croak "Too many arguments for $n method" if @_ > 2;
 			@_ == 2 ? ( $_[0]{$n} = $_[1] ) : ${ \$_[0]{$n} }
 		};
+	undef $p{*$s{PACKAGE}}{$n};
 }
 
-sub TIESCALAR { bless \@_, shift }  # @_ = (class, ref, sub, name)
+sub TIESCALAR { bless \@_, shift }  # @_ = (class, lvalue, subref, object, name)
 sub FETCH { $_[0][0] }
 
 sub STORE {
-	local $_ = $_[1];
-	$_[0][1]->($_[2], $_) or croak "Invalid value for $_[0][3] property";
+	$_[0][1]->($_[0][2], local $_ = $_[1])
+	    or croak "Invalid value for $_[0][3] property";
 	$_[0][0] = $_;
+}
+
+sub UNIVERSAL::New : ATTR(CODE) {
+	my ($P, $s, $r) = @_;
+	my $n = *$s{NAME};
+	undef $r if not defined &$s;
+	*$s = sub {
+		my $c = shift;
+		croak qq(Can't call method "$n" on a reference) if ref $c;
+		croak "Odd number of arguments for $c->$n" if @_ % 2;
+		my $o = bless {}, $c;
+		my $l = \&Carp::shortmess;
+		local *Carp::shortmess = sub { $_[-1] .= " in $c->$n"; &$l; };
+		while (my ($p, $v) = splice @_, 0, 2) {
+			exists $p{$P}{$p} or croak qq(No such property "$p");
+			$o->$p($v);
+		}
+		return $r->($o) if $r;
+		return $o;
+	};
 }
 
 1;
@@ -54,7 +84,7 @@ Attribute::Property - Easy lvalue accessors with validation. ($foo->bar = 42)
     use Attribute::Property;
     use Carp;
 
-    sub new { bless { }, shift }
+    sub new : New { further initialization here ... }
 
     sub nondigits : Property { /^\D+\z/ }
     sub digits    : Property { /^\d+\z/ or croak "custom error message" }
@@ -68,9 +98,15 @@ Attribute::Property - Easy lvalue accessors with validation. ($foo->bar = 42)
 	$_ <= $self->maximum or croak "Value exceeds maximum";
     }
 
+    package Person;
+
+    sub new  : New;
+    sub name : Property;
+    sub age  : Property { /^\d+\z/ and $_ > 0 }
+
 =head2 USAGE
 
-    my $object = SomeClass->new;
+    my $object = SomeClass->new(digits => '123');
 
     $object->nondigits = "abc";
     $object->digits    = "123";
@@ -78,35 +114,74 @@ Attribute::Property - Easy lvalue accessors with validation. ($foo->bar = 42)
 
     $object->anyvalue('archaic style still works');
 
+    my $john = Person->new(name => 'John Doe', age => 19);
+    
+    $john->age++;
+    printf "%s is now %d years old", $john->name, $john->age;
+
     # These would croak
     $object->nondigits = "987";
     $object->digits    = "xyz";
 
 =head1 DESCRIPTION
 
-This module introduces the C<Property> attribute, which turns your method into
-an object property.  The original code block is used only to validate new
-values, the module croaks if it returns false.
+This module introduces two attributes that make object oriented programming
+much easier.  You can just define a constructor and some properties without
+having to write accessors.
 
-Feel free to croak explicitly if you don't want the default error message.
+=over 12
+
+=item C<Property>
+
+    sub color : Property;
+    sub color : Property { /^#[0-9A-F]{6}$/ }
+
+The C<Property> attribute turns a method into an object property.  The original
+code block is used only to validate new values, the module croaks if it returns
+false.  The method returns an I<lvalue>, meaning that you can create a reference
+to it, assign to it and apply a regex to it.
 
 Undefined subs (subs that have been declared but do not have a code block) with
-the C<Property> attribute will be properties without any validation.
+the C<Property> attribute will be properties without any value validation.
 
 In the validation code block, the object is in C<$_[0]> and the value to be
 validated is aliased as C<$_[1]> and for regexing convenience as C<$_>.
+
+Feel free to croak explicitly if you don't want the default error message.
+
+=item C<New>
+
+    sub new : New;
+    sub new : New { my $self = shift; ...; return $self; }
+
+The C<New> attribute turns a method into an object constructor.  The original
+code block can be used for further initialization, but it is completely
+optional.
+
+The constructor takes named arguments in C<< property => value >> pairs and
+populates the hash with the given pairs.  After validating them, of course.
+
+The new object is passed to the initialization code block as C<$_[0]>.  Be
+sure to return the object if you use any initialization block.  If there is
+no initialization code block, Attribute::Property takes care of returning
+the new object.
+
+=back
 
 =head1 PREREQUISITES
 
 Your object must be a blessed hash reference.  The property names will be used
 for the hash keys.
-    
-For class properties of C<Some::Module>, the hash C<%Some::Module> is used, for
-class properties of C<Module>, the hash C<%Attribute::Property::Module> is
-used.
 
-In short: C<< $foo->bar = 14 >> and C<< $foo->bar(14) >> assign 14 to
-C<< $foo->{bar} >> after positive validation.
+For class properties of C<Some::Module>, the hash C<%Some::Module> is used.
+For class properties of packages without C<::>, the behaviour is undefined.
+Currently, for properties of C<Class>, the hash C<%Attribute::Property::Class>
+is used but this may change in a future version.
+
+In short: C<< $foo->bar = 14 >> and C<< $foo->bar(14) >> assign 14 to 
+C<< $foo->{bar} >> after positive validation.  The same thing happens with C<< my
+$foo = Class->new(bar => 14); >> given that C<Class::new> uses the C<New>
+property.
 
 =head1 COMPATIBILITY
 
@@ -114,6 +189,17 @@ Old fashioned C<< $object->property(VALUE) >> is still available.
 
 This module requires a modern Perl, fossils like Perl 5.00x don't support our
 chicanery.
+
+=head1 BUGS
+
+=over 2
+
+=item *
+
+The C<New> attribute should really be called C<Constructor>, but that would
+conflict with the existing Attribute::Constructor module.
+
+=back
 
 =head1 LICENSE
 
@@ -125,7 +211,7 @@ responsibility.
 
 Juerd Waalboer <juerd@cpan.org> <http://juerd.nl/>
 
-Matthijs van Duin <pl@nubz.org>
+Matthijs van Duin <xmath@cpan.org>
 
 =cut
 

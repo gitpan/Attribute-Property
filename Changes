@@ -1,5 +1,14 @@
 Revision history for Perl extension Attribute::Property.
-$Id: Changes,v 1.8 2003/02/10 08:35:45 juerd Exp $
+$Id: Changes,v 1.11 2003/03/03 08:45:48 juerd Exp $
+
+1.03  ?
+	- Fixed object passing and added tests for $_[0]
+	- Improved speed for rvalue calls, new dependency: Want.pm
+	- Moved the attribute handler from INIT to CHECK phase
+	- Added an attribute for creating constructors: New. See pod for info
+	- Improved existing tests, added some
+	- Added tests for the new New attribute
+	- Minor documentation updates and of course documentation additions
 
 1.02  Mon Feb 10 09:36:55 2003
 	- Even more tests
