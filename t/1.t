@@ -3,7 +3,7 @@
 # make; perl -Iblib/lib t/1.t
 
 use lib 't/lib';
-use Test::More tests => 176;
+use Test::More tests => 386;
 
 # BEGIN {
 #     my $ok = \&ok;
@@ -34,19 +34,32 @@ my $ok;
 	sub foo2bar_du1 : Property { $_[1] =~ s/foo/bar/ }
 	sub ok2one : Property { $ok = 1 }
 	sub ok2zero : Property { $ok = 0 }
-	sub objectok : Property {
-	    $ok = $_[0] eq __PACKAGE__ || ref($_[0]) eq __PACKAGE__
-	}
+	sub objectok : Property { $ok = shift->isa(__PACKAGE__) }
 	sub DESTROY { $ok = 2; }
 	BEGIN { *begin = sub : Property { 1 } }
+
+        package X::Y;
+        @ISA = 'X::X';
+        sub xy_property : Property;
+        
+        package X::Z;
+        @ISA = 'X::Y';
+        sub new : New;
 }
 
 ok(my $object1 = eval { X::X->new }, "object1 construction");
 ok(!$@, "no error during object1 construction");
 ok(my $object2 = eval { X::X->New1 }, "object2 construction");
 ok(!$@, "no error during object2 construction");
+ok(my $object3 = eval { X::Y->New1 }, "object3 construction");
+ok(!$@, "no error during object3 construction");
+ok(my $object4 = eval { X::Z->new }, "object4 construction");
+ok(!$@, "no error during object4 construction");
 
-for my $y ([ $object1 => 'object1' ], [ $object2 => 'object2' ], [ "X::X" => 'class' ]) {
+for my $y ([ $object1 => 'object1 (X)' ], [ $object2 => 'object2 (X)' ], 
+    [ $object3 => 'object3 (Y)' ], [ $object4 => 'object4 (Z)' ],
+    [ "X::X" => 'class1 (X)' ], [ "X::Y" => "class2 (Y)" ],
+    [ "X::Z" => 'class3 (Z)' ]) {
 
 my $x = $y->[0];
 my $z = "($y->[1])";
@@ -137,9 +150,9 @@ ok($x->{digits} == 234, "$z hash element gets set with reference assignment");
 
 ok($object1->begin = 1, "generated property works");
 
-undef $object1;
+$ok = 0; undef $object1;
 ok($ok == 2, "object1 gets destroyed correctly");
-undef $object2;
+$ok = 0; undef $object2;
 ok($ok == 2, "object2 gets destroyed correctly");
 
 my $o;
@@ -171,5 +184,17 @@ ok($o->digits==123 && $o->any eq "z", "setting multiple properties succeeds");
 
 ok(!eval q{my$a= sub : Property { }; 1 }, "anonymous sub can't be a property");
 ok($@ =~ /Property attribute.*anonymous sub/, "error message says so");
+
+ok($o = X::Y->New1(any => 135, xy_property => 196), "subclass recognises SUPER's property");
+ok($o->any == 135, "initial inherited property assignment succeeds");
+ok($o->xy_property == 196, "own property assignment succeeds");
+ok($o = X::Z->new(any => 153, xy_property => 169), "sub-subclass works too");
+ok($o->any == 153, "inherited inherited property assignment succeeds again");
+ok($o->xy_property == 169, "another initial inherited property assignments succeeds");
+ok($o->any = 15, "inherited property still an lvalue");
+ok($o->any == 15, "inherited property assignment succeeds");
+ok(!eval { $o->digits = "abc" }, "inherited property keeps restrictions");
+ok($@ =~ /digits property/, "error message agrees");
+
 
 # vim: ft=perl sts=0 noet sw=8 ts=8

@@ -1,7 +1,6 @@
 package Attribute::Property;
 
 # $Id: Property.pm,v 1.48 2003/04/21 16:04:14 juerd Exp $
-# v 1.25 -> CPAN as 1.02
 
 use 5.006;
 use Attribute::Handlers;
@@ -10,8 +9,8 @@ use Carp;
 # use Want qw(want rreturn);
 BEGIN {
     if (eval { require Want }) {
-        *want    = Want::want;
-        *rreturn = Want::rreturn;
+        *want    = *Want::want;
+        *rreturn = *Want::rreturn;
     } else {
         *want    = sub { 0 };
         *rreturn = sub { 0 };
@@ -21,7 +20,7 @@ BEGIN {
 no strict;
 no warnings;
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 
 $Carp::Internal{Attribute::Handlers}++;	 # may we be forgiven for our sins
 $Carp::Internal{+__PACKAGE__}++;
@@ -29,55 +28,56 @@ $Carp::Internal{+__PACKAGE__}++;
 my %p;
 
 sub UNIVERSAL::Property : ATTR(CODE) {
-	my (undef, $s, $r) = @_;
-	croak "Cannot use Property attribute with anonymous sub" unless ref $s;
-	my $n = *$s{NAME};
-	*$s = defined &$s
-		? sub : lvalue {
-			croak "Too many arguments for $n method" if @_ > 2;
-			if (want 'RVALUE') {
-	   		        rreturn $_[0]{$n} if @_ != 2;
-			        $r->($_[0], local $_ = $_[1]) 
-				        or croak "Invalid value for $n property";
-			        rreturn $_[0]{$n} = $_;
-			}
-			tie my $foo, __PACKAGE__, ${ \$_[0]{$n} }, $r, $_[0],$n;
-			@_ == 2 ? ( $foo = $_[1] ) : $foo
-		}
-		: sub : lvalue {
-			croak "Too many arguments for $n method" if @_ > 2;
-			@_ == 2 ? ( $_[0]{$n} = $_[1] ) : ${ \$_[0]{$n} }
-		};
-	undef $p{*$s{PACKAGE}}{$n};
+    my (undef, $s, $r) = @_;
+    croak "Cannot use Property attribute with anonymous sub" unless ref $s;
+    my $n = *$s{NAME};
+    *$s = defined &$s
+        ? sub : lvalue {
+            croak "Too many arguments for $n method" if @_ > 2;
+            if (want 'RVALUE') {
+                rreturn $_[0]{$n} if @_ != 2;
+                $r->($_[0], local $_ = $_[1]) 
+                    or croak "Invalid value for $n property";
+                rreturn $_[0]{$n} = $_;
+            }
+            tie my $foo, __PACKAGE__, ${ \$_[0]{$n} }, $r, $_[0], $n;
+            @_ == 2 ? ( $foo = $_[1] ) : $foo
+        }
+        : sub : lvalue {
+            croak "Too many arguments for $n method" if @_ > 2;
+            @_ == 2 ? ( $_[0]{$n} = $_[1] ) : ${ \$_[0]{$n} }
+        };
+    undef $p{\&$s};
 }
 
 sub TIESCALAR { bless \@_, shift }  # @_ = (class, lvalue, subref, object, name)
 sub FETCH { $_[0][0] }
 
 sub STORE {
-	$_[0][1]->($_[0][2], local $_ = $_[1])
-	    or croak "Invalid value for $_[0][3] property";
-	$_[0][0] = $_;
+    $_[0][1]->($_[0][2], local $_ = $_[1])
+        or croak "Invalid value for $_[0][3] property";
+    $_[0][0] = $_;
 }
 
 sub UNIVERSAL::New : ATTR(CODE) {
-	my ($P, $s, $r) = @_;
-	my $n = *$s{NAME};
-	undef $r if not defined &$s;
-	*$s = sub {
-		my $c = shift;
-		croak qq(Can't call method "$n" on a reference) if ref $c;
-		croak "Odd number of arguments for $c->$n" if @_ % 2;
-		my $o = bless {}, $c;
-		my $l = \&Carp::shortmess;
-		local *Carp::shortmess = sub { $_[-1] .= " in $c->$n"; &$l; };
-		while (my ($p, $v) = splice @_, 0, 2) {
-			exists $p{$P}{$p} or croak qq(No such property "$p");
-			$o->$p($v);
-		}
-		return $r->($o) if $r;
-		return $o;
-	};
+    my ($P, $s, $r) = @_;
+    my $n = *$s{NAME};
+    undef $r if not defined &$s;
+    *$s = sub {
+        my $c = shift;
+        croak qq(Can't call method "$n" on a reference) if ref $c;
+        croak "Odd number of arguments for $c->$n" if @_ % 2;
+        my $o = bless {}, $c;
+        my $l = \&Carp::shortmess;
+        local *Carp::shortmess = sub { $_[-1] .= " in $c->$n"; &$l; };
+        while (my ($p, $v) = splice @_, 0, 2) {
+            my $m = $o->can($p);
+            $m and exists $p{$m} or croak qq(No such property "$p");
+            $m->($o, $v);
+        }
+        return $r->($o) if $r;
+        return $o;
+    };
 }
 
 1;
