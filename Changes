@@ -1,5 +1,12 @@
 Revision history for Perl extension Attribute::Property.
-$Id: Changes,v 1.3 2003/02/08 17:35:09 juerd Exp $
+$Id: Changes,v 1.4 2003/02/09 13:29:13 juerd Exp $
+
+1.01  Sun Feb  9 14:26:16 2003
+	- Added more tests
+	- Made object available as $_[0]
+	- Made new value available as $_[1] in addition to $_
+	- Documented that changes to $_ or $_[1] change the actual new values
+	- Changed abstract to something everyone understands
 
 1.00  Sat Feb  8 17:12:09 2003
 	- First CPAN release
