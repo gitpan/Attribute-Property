@@ -1,7 +1,7 @@
 package Attribute::Property;
 
-# $Id: Property.pm,v 1.18 2003/02/09 13:29:13 juerd Exp $
-# v 1.18 -> CPAN as 1.01
+# $Id: Property.pm,v 1.25 2003/02/10 08:35:45 juerd Exp $
+# v 1.25 -> CPAN as 1.02
 
 use 5.006;
 use Attribute::Handlers;
@@ -9,9 +9,9 @@ use Carp;
 no strict;
 no warnings;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
-$Carp::Internal{Attribute::Handlers}++;	# may we be forgiven for our sins
+$Carp::Internal{Attribute::Handlers}++;	 # may we be forgiven for our sins
 $Carp::Internal{+__PACKAGE__}++;
 
 sub UNIVERSAL::Property : ATTR(CODE,INIT) {
@@ -21,7 +21,7 @@ sub UNIVERSAL::Property : ATTR(CODE,INIT) {
 	*$s = defined &$s
 		? sub : lvalue {
 			croak "Too many arguments for $n method" if @_ > 2;
-			tie my $foo, __PACKAGE__, ${ \$_[0]{$n} }, $r, $_[0];
+			tie my $foo, __PACKAGE__, ${ \$_[0]{$n} }, $r, $_[0],$n;
 			@_ == 2 ? ( $foo = $_[1] ) : $foo
 		}
 		: sub : lvalue {
@@ -30,13 +30,14 @@ sub UNIVERSAL::Property : ATTR(CODE,INIT) {
 		};
 }
 
-sub TIESCALAR { bless \@_, shift }
+sub TIESCALAR { bless \@_, shift }  # @_ = (class, ref, sub, name)
+sub FETCH { $_[0][0] }
+
 sub STORE {
 	local $_ = $_[1];
-	$_[0][1]->($_[2], $_) or croak "Invalid property value";
+	$_[0][1]->($_[2], $_) or croak "Invalid value for $_[0][3] property";
 	$_[0][0] = $_;
 }
-sub FETCH { $_[0][0] }
 
 1;
 
@@ -64,7 +65,7 @@ Attribute::Property - Easy lvalue accessors with validation. ($foo->bar = 42)
 	my $self = shift;  # Object is accessible as $_[0]
 	s/^\s+//;          # New value can be altered through $_ or $_[1]
 
-	$_ =< $self->maximum or croak "Value exceeds maximum";
+	$_ <= $self->maximum or croak "Value exceeds maximum";
     }
 
 =head2 USAGE
@@ -99,6 +100,13 @@ validated is aliased as C<$_[1]> and for regexing convenience as C<$_>.
 
 Your object must be a blessed hash reference.  The property names will be used
 for the hash keys.
+    
+For class properties of C<Some::Module>, the hash C<%Some::Module> is used, for
+class properties of C<Module>, the hash C<%Attribute::Property::Module> is
+used.
+
+In short: C<< $foo->bar = 14 >> and C<< $foo->bar(14) >> assign 14 to
+C<< $foo->{bar} >> after positive validation.
 
 =head1 COMPATIBILITY
 
@@ -115,7 +123,7 @@ responsibility.
 
 =head1 AUTHORS
 
-Juerd Waalboer <juerd@cpan.org>
+Juerd Waalboer <juerd@cpan.org> <http://juerd.nl/>
 
 Matthijs van Duin <pl@nubz.org>
 

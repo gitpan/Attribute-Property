@@ -1,5 +1,11 @@
 Revision history for Perl extension Attribute::Property.
-$Id: Changes,v 1.4 2003/02/09 13:29:13 juerd Exp $
+$Id: Changes,v 1.8 2003/02/10 08:35:45 juerd Exp $
+
+1.02  Mon Feb 10 09:36:55 2003
+	- Even more tests
+	- Documented which hashes get used when
+	- Minor documentation updates
+	- Changed default error message to include property name
 
 1.01  Sun Feb  9 14:26:16 2003
 	- Added more tests

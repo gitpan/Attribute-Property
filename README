@@ -1,5 +1,5 @@
 Attribute::Property
-$Id: README,v 1.2 2003/02/08 16:47:26 juerd Exp $
+$Id: README,v 1.3 2003/02/09 19:04:50 juerd Exp $
 
 INSTALLATION
 
@@ -15,8 +15,8 @@ Or use CPANPLUS to automate the process.
 Module documentation:
 
 NAME
-    Attribute::Property - lvalue methods as properties with value
-    validation.
+    Attribute::Property - Easy lvalue accessors with validation. ($foo->bar
+    = 42)
 
 SYNOPSIS
   CLASS
@@ -31,6 +31,13 @@ SYNOPSIS
         sub digits    : Property { /^\d+\z/ or croak "custom error message" }
         sub anyvalue  : Property;
         sub another   : Property;
+
+        sub value     : Property {
+            my $self = shift;  # Object is accessible as $_[0]
+            s/^\s+//;          # New value can be altered through $_ or $_[1]
+
+            $_ <= $self->maximum or croak "Value exceeds maximum";
+        }
 
   USAGE
         my $object = SomeClass->new;
@@ -57,9 +64,19 @@ DESCRIPTION
     block) with the "Property" attribute will be properties without any
     validation.
 
+    In the validation code block, the object is in $_[0] and the value to be
+    validated is aliased as $_[1] and for regexing convenience as $_.
+
 PREREQUISITES
     Your object must be a blessed hash reference. The property names will be
     used for the hash keys.
+
+    For class properties of "Some::Module", the hash %Some::Module is used,
+    for class properties of "Module", the hash %Attribute::Property::Module
+    is used.
+
+    In short: "$foo->bar = 14" and "$foo->bar(14)" assign 14 to
+    "$foo->{bar}" after positive validation.
 
 COMPATIBILITY
     Old fashioned "$object->property(VALUE)" is still available.
@@ -73,7 +90,7 @@ LICENSE
     any responsibility.
 
 AUTHORS
-    Juerd Waalboer <juerd@cpan.org>
+    Juerd Waalboer <juerd@cpan.org> <http://juerd.nl/>
 
     Matthijs van Duin <pl@nubz.org>
 
